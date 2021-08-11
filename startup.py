@@ -1,5 +1,10 @@
 #!/usr/bin/python3
 
+#
+# Copyright (C) 2021, Adam Meily <meily.adam@gmail.com>
+#
+
+
 import subprocess
 from dataclasses import dataclass
 from typing import List, Optional
@@ -23,7 +28,8 @@ TOUCHSCREEN_DEVICE_NAME = 'pointer:Goodix Capacitive TouchScreen'
 #
 # xrandr --listmonitors output parser
 #
-# sample output:
+# sample output (docked):
+#
 # Monitors: 2
 #  0: +*DSI-1 800/212x480/127+512+1080  DSI-1
 #  1: +HDMI-1 1920/598x1080/336+0+0  HDMI-1
@@ -40,6 +46,9 @@ MONITOR_PATTERN = re.compile(
 
 @dataclass
 class Monitor:
+    '''
+    An active monitor.
+    '''
     id: int
     name: str
     width: int = 0
@@ -71,6 +80,10 @@ class Cyberdeck:
                 self.touchscreen = monitor
 
     def detect_monitors(self) -> None:
+        '''
+        Detect active monitors. This will load touchscreen information and, when docked, load the
+        HDMI monitor information.
+        '''
         monitors = []
         print('Detecting active monitors')
         output = subprocess.check_output(['xrandr', '--listmonitors']).decode()
@@ -90,12 +103,17 @@ class Cyberdeck:
 
     def _get_touchscreen_transform_matrix(self) -> List[float]:
         '''
-        Touchscreen transformation matrix. This logic was copied from:
+        Touchscreen transformation matrix. This is needed while docked to make sure that
+        touchscreen coordinates are properly translated to only the touchscreen. Without this,
+        clicking the touch screen may move the mouse click to an area on the HDMI display and the
+        touchscreen is almost impossible to use. This logic was copied from:
         https://docs.google.com/spreadsheets/d/13CNQjWfzpEkHM4ZdCcUWDTdQNaFqQ6TYTwatQsYcHcQ/edit#gid=1008975224
         '''
-
-        total_width = max(self.hdmi.width, self.touchscreen.x + self.touchscreen.width)
-        total_height = max(self.touchscreen.height, self.touchscreen.y + self.touchscreen.height)
+        # Get the entire screen dimensions
+        total_width = max(self.hdmi.width + self.hdmi.x,
+                          self.touchscreen.x + self.touchscreen.width)
+        total_height = max(self.touchscreen.height + self.hdmi.y,
+                           self.touchscreen.y + self.touchscreen.height)
 
         return [
             self.touchscreen.width / total_width,
@@ -109,7 +127,10 @@ class Cyberdeck:
             1.0
         ]
 
-    def setup_terminal_touchscreen(self):
+    def setup_docked(self):
+        '''
+        Setup cyberdeck in docked mode (HDMI plugged in).
+        '''
         # fix touchscreen click coordinates when HDMI is plugged in
         transform_matrix = self._get_touchscreen_transform_matrix()
         xinput = [
@@ -135,10 +156,15 @@ class Cyberdeck:
         subprocess.Popen(xterm, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                          stdin=subprocess.DEVNULL, cwd=os.path.expanduser("~"))
 
+    def setup_undocked(self):
+        pass
+
     def setup(self):
         self.detect_monitors()
         if self.hdmi and self.touchscreen:
-            self.setup_terminal_touchscreen()
+            self.setup_docked()
+        else:
+            self.setup_undocked()
 
 
 if __name__ == '__main__':
