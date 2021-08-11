@@ -4,6 +4,7 @@ import subprocess
 from dataclasses import dataclass
 from typing import List, Optional
 import re
+import os
 
 
 # HDMI monitor named, as reported by xrandr
@@ -121,7 +122,7 @@ class Cyberdeck:
         xterm = [
             'xterm',
             '-fa', 'Monospace Regular',  # font family
-            '-fs', '10',  # font size
+            '-fs', '11',  # font size
             '-fullscreen',  # full screen, no title bar
             '-bc',  # block cursor
             '-cr', 'green',  # green cursor
@@ -131,7 +132,8 @@ class Cyberdeck:
             '-geometry', f'+{self.touchscreen.x}+{self.touchscreen.y}'  # position on touchscreen
         ]
         #print('run:', *xterm)
-        subprocess.run(xterm, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.Popen(xterm, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         stdin=subprocess.DEVNULL, cwd=os.path.expanduser("~"))
 
     def setup(self):
         self.detect_monitors()
