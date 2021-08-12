@@ -17,12 +17,12 @@ if __name__ == '__main__':
                              stdin=subprocess.DEVNULL, stdout=subprocess.PIPE)
 
     try:
-        while watch.is_alive():
+        while watch.poll() is None:
             parts = watch.stdout.readline().strip().lower().split()
             if not parts:
                 continue
 
-            action = parts[0]
+            action = parts[0].decode()
             if action == 'unblank':
                 toggle_touchscreen_backlight(True)
             elif action in ('blank', 'run'):
@@ -30,4 +30,4 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         watch.terminate()
 
-    watch.join()
+    watch.wait()

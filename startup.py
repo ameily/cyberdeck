@@ -7,7 +7,6 @@
 
 import subprocess
 from dataclasses import dataclass
-from sys import stdin
 from typing import List, Optional
 import re
 import os
@@ -158,7 +157,11 @@ class Cyberdeck:
         subprocess.Popen(xterm, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                          stdin=subprocess.DEVNULL, cwd=os.path.expanduser("~"))
 
-    def launch_touchscreen_power_watch(self):
+    def launch_touchscreen_power_watch(self) -> None:
+        '''
+        Start a background process that monitors for xscreensaver activity. This script will turn
+        off the touchscreen backlight while the screensaver is active.
+        '''
         script = os.path.join(os.path.dirname(__file__), 'touchscreen-power-watch.py')
         subprocess.Popen([sys.executable, script], stdout=subprocess.DEVNULL,
                          stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
