@@ -7,9 +7,11 @@
 
 import subprocess
 from dataclasses import dataclass
+from sys import stdin
 from typing import List, Optional
 import re
 import os
+import sys
 
 
 # HDMI monitor named, as reported by xrandr
@@ -156,10 +158,16 @@ class Cyberdeck:
         subprocess.Popen(xterm, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                          stdin=subprocess.DEVNULL, cwd=os.path.expanduser("~"))
 
+    def launch_touchscreen_power_watch(self):
+        script = os.path.join(os.path.dirname(__file__), 'touchscreen-power-watch.py')
+        subprocess.Popen([sys.executable, script], stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
+
     def setup_undocked(self):
         pass
 
     def setup(self):
+        self.launch_touchscreen_power_watch()
         self.detect_monitors()
         if self.hdmi and self.touchscreen:
             self.setup_docked()
