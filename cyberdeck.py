@@ -158,7 +158,7 @@ class Cyberdeck:
             '--type=float', 'Coordinate Transformation Matrix'
         ] + [str(i) for i in transform_matrix]
         subprocess.check_call(xinput, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        #print('run:', *xinput)
+        # print('run:', *xinput)
 
         xterm = [
             'xterm',
@@ -172,7 +172,7 @@ class Cyberdeck:
             '-fg', 'white',  # foregrond color = white
             '-geometry', f'+{self.touchscreen.x}+{self.touchscreen.y}'  # position on touchscreen
         ]
-        #print('run:', *xterm)
+        # print('run:', *xterm)
         subprocess.Popen(xterm, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                          stdin=subprocess.DEVNULL, cwd=os.path.expanduser("~"))
 
