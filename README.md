@@ -10,7 +10,7 @@ A repo containing scripts and configuration files for Raspberry Pi 400 based Cyb
 
 ## Setup
 
-### Files
+### Hardware Configuration Files and Setup Scripts
 
 | Filename | Description |
 |----------|-------------|
@@ -38,5 +38,12 @@ A repo containing scripts and configuration files for Raspberry Pi 400 based Cyb
   ```
   sudo vim /etc/xdg/lxsession/LXDE-pi/autostart
   # add the following to the end of the file
-  @/path/to/cyberdeck/startup.py
+  @/path/to/cyberdeck/cyberdeck.py start
+  ```
+- (Optional) Add cool cyberdeck banner to `.bashrc`
+  ```bash
+  vim ~/.bashrc
+  # At the end of the file, add:
+  alias cyberdeck=/path/to/cyberdeck/cyberdeck.py
+  cyberdeck banner
   ```

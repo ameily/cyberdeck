@@ -7,10 +7,14 @@
 
 import subprocess
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Tuple
 import re
 import os
 import sys
+import socket
+import psutil
+
+__version__ = '0.1.0'
 
 
 # HDMI monitor named, as reported by xrandr
@@ -43,6 +47,21 @@ MONITOR_PATTERN = re.compile(
     r'\s+(\S+)\s*$',  # name
     re.MULTILINE
 )
+
+CPU_TEMP_FILENAME = '/sys/class/thermal/thermal_zone0/temp'
+BANNER = '''
+\x1b[38;5;40m===========================================================
+ _____         _                     _              _
+/  __ \\       | |                   | |            | |
+\x1b[38;5;41m| /  \\/ _   _ | |__    ___  _ __  __| |  ___   ___ | | __
+| |    | | | || '_ \\  / _ \\| '__|/ _` | / _ \\ / __|| |/ /
+| \\__/\\| |_| || |_) ||  __/| |  | (_| ||  __/| (__ |   <
+\x1b[38;5;42m \\____/ \\__, ||_.__/  \\___||_|   \\__,_| \\___| \\___||_|\\_\\
+         __/ |
+        |___/                                        \x1b[38;5;45mv{version}
+\x1b[38;5;46m===========================================================
+\x1b[0m
+'''.format(version=__version__)
 
 
 @dataclass
@@ -86,7 +105,7 @@ class Cyberdeck:
         HDMI monitor information.
         '''
         monitors = []
-        print('Detecting active monitors')
+        # print('Detecting active monitors')
         output = subprocess.check_output(['xrandr', '--listmonitors']).decode()
         for match in MONITOR_PATTERN.finditer(output):
             monitor = Monitor(
@@ -98,7 +117,7 @@ class Cyberdeck:
                 y=int(match.group(5))
             )
             monitors.append(monitor)
-            print('>> Monitor:', monitor.name)
+            # print('>> Monitor:', monitor.name)
 
         self.monitors = monitors
 
@@ -169,15 +188,95 @@ class Cyberdeck:
     def setup_undocked(self):
         pass
 
-    def setup(self):
+    def start(self):
         self.launch_touchscreen_power_watch()
-        self.detect_monitors()
         if self.hdmi and self.touchscreen:
             self.setup_docked()
         else:
             self.setup_undocked()
 
+    def get_cpu_temp(self) -> Tuple[int, str]:
+        with open(CPU_TEMP_FILENAME, 'r') as fp:
+            value = fp.read()
+
+        temp = int(((float(value.strip()) / 1000.0) * 1.8) + 32)
+        if temp < 110:
+            color = '1;34m'
+        elif temp < 130:
+            color = '1;33m'
+        else:
+            color = '1;31m'
+
+        return temp, color
+
+    def get_cpu_usage(self) -> List[Tuple[int, str]]:
+        usage = psutil.cpu_percent(percpu=True)
+        cpus = []
+        for cpu in usage:
+            if cpu < 50.0:
+                color = '1;34m'
+            elif cpu < 75.0:
+                color = '1;33m'
+            else:
+                color = '1;31m'
+            cpus.append((int(cpu), color))
+        return cpus
+
+    def get_memory_usage(self) -> Tuple[int, str]:
+        usage = int(psutil.virtual_memory().percent)
+        if usage < 50.0:
+            color = '1;34m'
+        elif usage < 75.0:
+            color = '1;33m'
+        else:
+            color = '1;31m'
+        return usage, color
+
+    def print_banner(self):
+        mode = 'Docked' if self.hdmi else 'Undocked'
+        username = os.getlogin()
+        hostname = socket.gethostname()
+        temp, temp_color = self.get_cpu_temp()
+        cpus = '    '.join([
+            f'\x1b[{color}{cpu}%\x1b[0m' for cpu, color in self.get_cpu_usage()
+        ])
+        memory, memory_color = self.get_memory_usage()
+
+        print(BANNER)
+        print(f'Status:    \x1b[1;32mGood\x1b[0m ({mode})')
+        print(f'Operator:  \x1b[1;33m{username}\x1b[0m @ \x1b[1;33m{hostname}\x1b[0m')
+        print('Network:   \x1b[1;35m192.168.254.214\x1b[0m')  # TODO
+        for monitor in self.monitors:
+            if monitor is self.hdmi:
+                monitor_type = '\x1b[1;36mDesktop\x1b[0m'
+            elif monitor is self.touchscreen:
+                monitor_type = '\x1b[1;32mTerminal\x1b[0m'
+            else:
+                monitor_type = 'unknown'
+
+            print(f'Monitor:   [{monitor.id}] {monitor_type}',
+                  f'{monitor.width}x{monitor.height} +{monitor.x}.{monitor.y}')
+
+        print(f'Temp:      \x1b[{temp_color}{temp}F\x1b[0m')
+        print(f'CPU:       {cpus}')
+        print(f'Memory:    \x1b[{memory_color}{memory}%\x1b[0m')
+        print()
+
 
 if __name__ == '__main__':
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    commands = parser.add_subparsers(required=True, dest='command')
+    commands.add_parser('start')
+    commands.add_parser('banner')
+
+    args = parser.parse_args()
+
     cyberdeck = Cyberdeck()
-    cyberdeck.setup()
+    cyberdeck.detect_monitors()
+
+    if args.command == 'start':
+        cyberdeck.start()
+    elif args.command == 'banner':
+        cyberdeck.print_banner()
