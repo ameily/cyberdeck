@@ -158,7 +158,7 @@ class Cyberdeck:
             '--type=float', 'Coordinate Transformation Matrix'
         ] + [str(i) for i in transform_matrix]
         subprocess.check_call(xinput, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        #print('run:', *xinput)
+        # print('run:', *xinput)
 
         xterm = [
             'xterm',
@@ -172,7 +172,7 @@ class Cyberdeck:
             '-fg', 'white',  # foregrond color = white
             '-geometry', f'+{self.touchscreen.x}+{self.touchscreen.y}'  # position on touchscreen
         ]
-        #print('run:', *xterm)
+        # print('run:', *xterm)
         subprocess.Popen(xterm, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                          stdin=subprocess.DEVNULL, cwd=os.path.expanduser("~"))
 
@@ -189,6 +189,9 @@ class Cyberdeck:
         pass
 
     def start(self):
+        '''
+        Start Cyberdeck. This should only be called once after login.
+        '''
         self.launch_touchscreen_power_watch()
         if self.hdmi and self.touchscreen:
             self.setup_docked()
@@ -196,6 +199,10 @@ class Cyberdeck:
             self.setup_undocked()
 
     def get_cpu_temp(self) -> Tuple[int, str]:
+        '''
+        Get the CPU temperature, in fahrenheit. Returns a tuple containing the core temperature and
+        the ANSI escape color code for the current temperature.
+        '''
         with open(CPU_TEMP_FILENAME, 'r') as fp:
             value = fp.read()
 
@@ -210,6 +217,10 @@ class Cyberdeck:
         return temp, color
 
     def get_cpu_usage(self) -> List[Tuple[int, str]]:
+        '''
+        Get the CPU usage for each core. Returns a list of tuples containing the core usage
+        (10 == 10%) and the ANSI escape color code for the usage.
+        '''
         usage = psutil.cpu_percent(interval=0.1, percpu=True)
         cpus = []
         for cpu in usage:
@@ -223,6 +234,10 @@ class Cyberdeck:
         return cpus
 
     def get_memory_usage(self) -> Tuple[int, str]:
+        '''
+        Get memory usage. This returns a tuple containing the memory usage percantage (10 == 10%)
+        and the ANSI escape color code for the usage.
+        '''
         usage = int(psutil.virtual_memory().percent)
         if usage < 50.0:
             color = '1;34m'
@@ -232,7 +247,10 @@ class Cyberdeck:
             color = '1;31m'
         return usage, color
 
-    def print_banner(self):
+    def print_banner(self) -> None:
+        '''
+        Print the cyberdeck banner
+        '''
         if self.hdmi:
             mode = 'Docked'
         elif self.touchscreen:
