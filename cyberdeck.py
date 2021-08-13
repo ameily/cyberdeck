@@ -210,7 +210,7 @@ class Cyberdeck:
         return temp, color
 
     def get_cpu_usage(self) -> List[Tuple[int, str]]:
-        usage = psutil.cpu_percent(percpu=True)
+        usage = psutil.cpu_percent(interval=0.1, percpu=True)
         cpus = []
         for cpu in usage:
             if cpu < 50.0:
@@ -233,7 +233,13 @@ class Cyberdeck:
         return usage, color
 
     def print_banner(self):
-        mode = 'Docked' if self.hdmi else 'Undocked'
+        if self.hdmi:
+            mode = 'Docked'
+        elif self.touchscreen:
+            mode = 'Undocked'
+        else:
+            mode = 'Remote'
+
         username = os.getlogin()
         hostname = socket.gethostname()
         temp, temp_color = self.get_cpu_temp()
@@ -274,7 +280,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     cyberdeck = Cyberdeck()
-    cyberdeck.detect_monitors()
+    if os.environ.get('DISPLAY'):
+        cyberdeck.detect_monitors()
 
     if args.command == 'start':
         cyberdeck.start()
