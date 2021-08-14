@@ -23,6 +23,8 @@ HDMI_MONITOR_NAME = 'HDMI-1'
 TOUCHSCREEN_MONITOR_NAME = 'DSI-1'
 # Touchscreen device name, as reported by xinput
 TOUCHSCREEN_DEVICE_NAME = 'pointer:Goodix Capacitive TouchScreen'
+# Touchscreen power control filename
+BACKLIGHT_POWER_FILENAME = '/sys/class/backlight/rpi_backlight/bl_power'
 
 #
 # Keep this around for future reference since these numbers were initially working.
@@ -176,13 +178,12 @@ class Cyberdeck:
         subprocess.Popen(xterm, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                          stdin=subprocess.DEVNULL, cwd=os.path.expanduser("~"))
 
-    def launch_touchscreen_power_watch(self) -> None:
+    def launch_screensaver(self) -> None:
         '''
         Start a background process that monitors for xscreensaver activity. This script will turn
         off the touchscreen backlight while the screensaver is active.
         '''
-        script = os.path.join(os.path.dirname(__file__), 'touchscreen-power-watch.py')
-        subprocess.Popen([sys.executable, script], stdout=subprocess.DEVNULL,
+        subprocess.Popen([sys.executable, __file__], stdout=subprocess.DEVNULL,
                          stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
 
     def setup_undocked(self):
@@ -192,7 +193,7 @@ class Cyberdeck:
         '''
         Start Cyberdeck. This should only be called once after login.
         '''
-        self.launch_touchscreen_power_watch()
+        self.launch_screensaver()
         if self.hdmi and self.touchscreen:
             self.setup_docked()
         else:
@@ -280,6 +281,39 @@ class Cyberdeck:
         print(f'Memory:    \x1b[{memory_color}{memory}%\x1b[0m')
         print()
 
+    def screensaver(self) -> None:
+        '''
+        Monitor xscreensaver events and turn off the touchscreen backlight while the screensaver is
+        active.
+        '''
+        watch = subprocess.Popen(['xscreensaver-command', '-watch'], stderr=subprocess.DEVNULL,
+                                 stdin=subprocess.DEVNULL, stdout=subprocess.PIPE)
+
+        try:
+            while watch.poll() is None:
+                parts = watch.stdout.readline().strip().lower().split()
+                if not parts:
+                    continue
+
+                action = parts[0].decode()
+                if action == 'unblank':
+                    self.toggle_touchscreen_backlight(True)
+                elif action in ('blank', 'run'):
+                    self.toggle_touchscreen_backlight(False)
+        except KeyboardInterrupt:
+            watch.terminate()
+
+        watch.wait()
+
+    def toggle_touchscreen_backlight(enabled: bool) -> None:
+        '''
+        Toggle the touchscreen backlight.
+
+        :param enabled: turn on the backlight
+        '''
+        with open(BACKLIGHT_POWER_FILENAME, 'wb') as fp:
+            fp.write(b'0\n' if enabled else b'1\n')
+
 
 if __name__ == '__main__':
     import argparse
@@ -288,6 +322,7 @@ if __name__ == '__main__':
     commands = parser.add_subparsers(required=True, dest='command')
     commands.add_parser('start')
     commands.add_parser('banner')
+    commands.add_parser('screensaver')
 
     args = parser.parse_args()
 
@@ -298,3 +333,5 @@ if __name__ == '__main__':
         cyberdeck.start()
     elif args.command == 'banner':
         cyberdeck.print_banner()
+    elif args.commands == 'screensaver':
+        cyberdeck.screensaver()
