@@ -12,6 +12,7 @@ import re
 import os
 import sys
 import socket
+from enum import Enum
 import psutil
 
 __version__ = '0.1.0'
@@ -79,12 +80,20 @@ class Monitor:
     y: int = 0
 
 
+class CyberdeckMode(Enum):
+    docked = 'Docked'
+    undocked = 'Undocked'
+    terminal = 'Terminal'
+
+
 class Cyberdeck:
 
     def __init__(self):
         self.hdmi: Optional[Monitor] = None
         self.touchscreen: Optional[Monitor] = None
         self._monitors = []
+        self.mode = None
+        self.remote = None
 
     @property
     def monitors(self) -> List[Monitor]:
@@ -107,8 +116,20 @@ class Cyberdeck:
         HDMI monitor information.
         '''
         monitors = []
-        # print('Detecting active monitors')
-        output = subprocess.check_output(['xrandr', '--listmonitors']).decode()
+        if not os.environ.get('DISPLAY'):
+            env = os.environ.copy()
+            env['DISPLAY'] = ':0.0'
+        else:
+            env = None
+
+        if os.environ.get('SSH_CLIENT'):
+            self.remote = os.environ['SSH_CLIENT'].split()[0].strip()
+
+        try:
+            output = subprocess.check_output(['xrandr', '--listmonitors'], env=env).decode()
+        except subprocess.CalledProcessError:
+            output = ''
+
         for match in MONITOR_PATTERN.finditer(output):
             monitor = Monitor(
                 id=int(match.group(1)),
@@ -122,6 +143,12 @@ class Cyberdeck:
             # print('>> Monitor:', monitor.name)
 
         self.monitors = monitors
+        if self.hdmi and self.touchscreen:
+            self.mode = CyberdeckMode.docked
+        elif self.touchscreen:
+            self.mode = CyberdeckMode.undocked
+        else:
+            self.mode = CyberdeckMode.terminal
 
     def _get_touchscreen_transform_matrix(self) -> List[float]:
         '''
@@ -186,18 +213,13 @@ class Cyberdeck:
         subprocess.Popen([sys.executable, __file__], stdout=subprocess.DEVNULL,
                          stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
 
-    def setup_undocked(self):
-        pass
-
     def start(self):
         '''
         Start Cyberdeck. This should only be called once after login.
         '''
         self.launch_screensaver()
-        if self.hdmi and self.touchscreen:
+        if self.mode == 'Docked':
             self.setup_docked()
-        else:
-            self.setup_undocked()
 
     def get_cpu_temp(self) -> Tuple[int, str]:
         '''
@@ -248,17 +270,19 @@ class Cyberdeck:
             color = '1;31m'
         return usage, color
 
+    def get_ip_address(self) -> str:
+        try:
+            output = subprocess.check_output(['hostname', '--all-ip-addresses'],
+                                             stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
+        except subprocess.CalledProcessError:
+            output = b''
+
+        return output.decode().strip()
+
     def print_banner(self) -> None:
         '''
         Print the cyberdeck banner
         '''
-        if self.hdmi:
-            mode = 'Docked'
-        elif self.touchscreen:
-            mode = 'Undocked'
-        else:
-            mode = 'Remote'
-
         username = os.getlogin()
         hostname = socket.gethostname()
         temp, temp_color = self.get_cpu_temp()
@@ -266,11 +290,21 @@ class Cyberdeck:
             f'\x1b[{color}{cpu}%\x1b[0m' for cpu, color in self.get_cpu_usage()
         ])
         memory, memory_color = self.get_memory_usage()
+        mode = self.mode.value
+        if self.remote:
+            mode += f' (\x1b[1;35m{self.remote}\x1b[0m)'
+
+        ip = self.get_ip_address()
+        if ip:
+            ip_color = '1;35m'
+        else:
+            ip = 'Disconnected'
+            ip_color = '1;31m'
 
         print(BANNER)
-        print(f'Status:    \x1b[1;32mGood\x1b[0m ({mode})')
+        print(f'Mode:      {mode}')
         print(f'Operator:  \x1b[1;33m{username}\x1b[0m @ \x1b[1;33m{hostname}\x1b[0m')
-        print('Network:   \x1b[1;35m192.168.254.214\x1b[0m')  # TODO
+        print(f'Network:   \x1b[{ip_color}{ip}\x1b[0m')  # TODO
         for monitor in self.monitors:
             if monitor is self.hdmi:
                 monitor_type = '\x1b[1;36mDesktop\x1b[0m'
@@ -334,8 +368,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     cyberdeck = Cyberdeck()
-    if os.environ.get('DISPLAY'):
-        cyberdeck.detect_monitors()
+    cyberdeck.detect_monitors()
 
     if args.command == 'start':
         cyberdeck.start()
