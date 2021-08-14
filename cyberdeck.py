@@ -222,7 +222,7 @@ class Cyberdeck:
         Get the CPU usage for each core. Returns a list of tuples containing the core usage
         (10 == 10%) and the ANSI escape color code for the usage.
         '''
-        usage = psutil.cpu_percent(percpu=True)
+        usage = psutil.cpu_percent(interval=0.1, percpu=True)
         cpus = []
         for cpu in usage:
             if cpu < 50.0:
@@ -252,7 +252,13 @@ class Cyberdeck:
         '''
         Print the cyberdeck banner
         '''
-        mode = 'Docked' if self.hdmi else 'Undocked'
+        if self.hdmi:
+            mode = 'Docked'
+        elif self.touchscreen:
+            mode = 'Undocked'
+        else:
+            mode = 'Remote'
+
         username = os.getlogin()
         hostname = socket.gethostname()
         temp, temp_color = self.get_cpu_temp()
@@ -327,7 +333,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     cyberdeck = Cyberdeck()
-    cyberdeck.detect_monitors()
+    if os.environ.get('DISPLAY'):
+        cyberdeck.detect_monitors()
 
     if args.command == 'start':
         cyberdeck.start()
