@@ -8,6 +8,14 @@ A repo containing scripts and configuration files for Raspberry Pi 400 based Cyb
 - [Hyperpixel 4" touchscreen](https://www.adafruit.com/product/3578)
 - [Cyberdeck HAT](https://www.adafruit.com/product/4863)
 
+## Features
+
+- Auto detect when docked and undocked.
+  - **Docked** - HDMI is plugged in. Turns HDMI display into LXDE desktop and the touchscreen into a fullscreen xterm session.
+- Properly configures touchscreen to work in both docked and undocked mode.
+- Turn off touchscreen backlight when screensaver is active.
+
+
 ## Setup
 
 ### Hardware Configuration Files and Setup Scripts
