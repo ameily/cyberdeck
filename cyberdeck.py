@@ -311,12 +311,13 @@ class Cyberdeck:
 
         watch.wait()
 
-    def toggle_touchscreen_backlight(enabled: bool) -> None:
+    def toggle_touchscreen_backlight(self, enabled: bool) -> None:
         '''
         Toggle the touchscreen backlight.
 
         :param enabled: turn on the backlight
         '''
+        print('toggle_touchscreen_backlight:', enabled)
         with open(BACKLIGHT_POWER_FILENAME, 'wb') as fp:
             fp.write(b'0\n' if enabled else b'1\n')
 
@@ -340,5 +341,5 @@ if __name__ == '__main__':
         cyberdeck.start()
     elif args.command == 'banner':
         cyberdeck.print_banner()
-    elif args.commands == 'screensaver':
+    elif args.command == 'screensaver':
         cyberdeck.screensaver()
