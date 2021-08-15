@@ -94,8 +94,8 @@ def humanize_duration(duration: int) -> str:
     else:
         hours = None
 
-    minutes = duration / 60
-    seconds = duration % 60
+    minutes = int(duration / 60)
+    seconds = int(duration % 60)
 
     if hours:
         return f'{hours}:{minutes:02}:{seconds:02}'
@@ -377,7 +377,7 @@ class Cyberdeck:
         with open(BACKLIGHT_POWER_FILENAME, 'wb') as fp:
             fp.write(b'0\n' if enabled else b'1\n')
 
-    def get_audio_duration(self, filename: str) -> int:
+    def _get_audio_duration(self, filename: str) -> int:
         try:
             output = subprocess.check_output(['ffprobe', '-i', filename, '-show_format'],
                                              stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
@@ -387,7 +387,7 @@ class Cyberdeck:
         lines = output.splitlines()
         for line in lines:
             if line.startswith(b'duration='):
-                return int(line.split('=')[1].strip())
+                return int(float(line.split(b'=')[1].strip()))
 
         return 0
 
@@ -420,13 +420,14 @@ class Cyberdeck:
         except KeyboardInterrupt:
             vlc.terminate()
             vlc.wait()
+            raise
 
     def print_meditation_strategy(self, meditations: List[Tuple[str, int]], interval: int) -> None:
         print('Meditation Strategy:')
         offset = 0
         for path, duration in meditations:
-            length = humanize_duration(offset)
-            print(f'  {length} {os.path.basename(path)} ({humanize_duration(length)})')
+            start = humanize_duration(offset)
+            print(f'  {start} {os.path.basename(path)} ({humanize_duration(duration)})')
             offset += duration + interval
         print()
 
@@ -437,7 +438,7 @@ class Cyberdeck:
             print('error: no meditations available', file=sys.stderr)
             return
 
-        remaining = duration
+        remaining = duration * 60
         random.shuffle(meditations)
         for path, length in meditations:
             if length < remaining:
