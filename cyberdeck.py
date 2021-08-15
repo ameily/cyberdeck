@@ -211,6 +211,9 @@ class Cyberdeck:
         subprocess.check_call(xinput, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         # print('run:', *xinput)
 
+        self.terminal()
+
+    def terminal(self) -> None:
         xterm = [
             'xterm',
             '-fa', 'Monospace Regular',  # font family
@@ -462,7 +465,11 @@ if __name__ == '__main__':
     commands.add_parser('start')
     commands.add_parser('banner')
     commands.add_parser('screensaver')
-    commands.add_parser('meditate')
+    commands.add_parser('terminal')
+
+    meditate = commands.add_parser('meditate')
+    meditate.add_argument('-d', '--duration', action='store', default=60, type=int,
+                          help='meditation session duration, in minutes')
 
     args = parser.parse_args()
 
@@ -475,5 +482,7 @@ if __name__ == '__main__':
         cyberdeck.print_banner()
     elif args.command == 'screensaver':
         cyberdeck.screensaver()
+    elif args.command == 'terminal':
+        cyberdeck.terminal()
     elif args.command == 'meditate':
-        cyberdeck.meditate()
+        cyberdeck.meditate(duration=args.duration)
