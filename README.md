@@ -14,6 +14,17 @@ A repo containing scripts and configuration files for Raspberry Pi 400 based Cyb
   - **Docked** - HDMI is plugged in. Turns HDMI display into LXDE desktop and the touchscreen into a fullscreen xterm session.
 - Properly configures touchscreen to work in both docked and undocked mode.
 - Turn off touchscreen backlight when screensaver is active.
+- Mindfull meditation plan
+
+## Commands
+
+- `start` - start the cyberdeck
+- `banner` - print a status banner
+- `screensaver` - turn off the touchscreen backlight when the screensaver is active
+- `terminal` - launch a full screen xterm session on the touchscreen
+- `medidate [-d,--duration=MINUTES]` - launch a mindfull meditation session for the specified time
+  - Randomly creates a session from a selection of available mindfull meditation audio clips
+  - You can't hack if you're not grounded in the present moment!
 
 
 ## Setup
@@ -28,6 +39,11 @@ A repo containing scripts and configuration files for Raspberry Pi 400 based Cyb
 | `Xresources` | xterm config to make copy/paste more intuitive. |
 
 ### Procedure
+
+- Verify that VLC is installed.
+  ```bash
+  sudo apt-get install vlc
+  ```
 
 - Install screen configuration and calibration files.
   ```bash
@@ -48,6 +64,7 @@ A repo containing scripts and configuration files for Raspberry Pi 400 based Cyb
   # add the following to the end of the file
   @/path/to/cyberdeck/cyberdeck.py start
   ```
+
 - (Optional) Add cool cyberdeck banner to `.bashrc`
   ```bash
   vim ~/.bashrc
@@ -55,3 +72,7 @@ A repo containing scripts and configuration files for Raspberry Pi 400 based Cyb
   alias cyberdeck=/path/to/cyberdeck/cyberdeck.py
   cyberdeck banner
   ```
+
+- Store audio clips of minfull meditation sessions in the `./audio/meditations` directory.
+- Store an alarm audio clip that will be played after the meditation session has ended in the
+  `./audio/alarm.mp3` file.
