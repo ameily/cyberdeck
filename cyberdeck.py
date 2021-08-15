@@ -14,6 +14,9 @@ import sys
 import socket
 from enum import Enum
 import psutil
+import random
+import time
+
 
 __version__ = '0.1.0'
 
@@ -67,6 +70,10 @@ BANNER = '''
 '''.format(version=__version__)
 
 
+AUDIO_DIRECTORY = os.path.join(os.path.dirname(__file__), 'audio')
+MEDITATION_DIRECTORY = os.path.join(AUDIO_DIRECTORY, 'meditations')
+
+
 @dataclass
 class Monitor:
     '''
@@ -78,6 +85,21 @@ class Monitor:
     height: int = 0
     x: int = 0
     y: int = 0
+
+
+def humanize_duration(duration: int) -> str:
+    if duration > 3600:
+        hours = duration / 3600
+        duration = duration % 3600
+    else:
+        hours = None
+
+    minutes = duration / 60
+    seconds = duration % 60
+
+    if hours:
+        return f'{hours}:{minutes:02}:{seconds:02}'
+    return f'{minutes:02}:{seconds:02}'
 
 
 class CyberdeckMode(Enum):
@@ -355,6 +377,82 @@ class Cyberdeck:
         with open(BACKLIGHT_POWER_FILENAME, 'wb') as fp:
             fp.write(b'0\n' if enabled else b'1\n')
 
+    def get_audio_duration(self, filename: str) -> int:
+        try:
+            output = subprocess.check_output(['ffprobe', '-i', filename, '-show_format'],
+                                             stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
+        except subprocess.CalledProcessError:
+            output = b''
+
+        lines = output.splitlines()
+        for line in lines:
+            if line.startswith(b'duration='):
+                return int(line.split('=')[1].strip())
+
+        return 0
+
+    def load_meditations(self) -> List[Tuple[str, int]]:
+        meditations = []
+        try:
+            filenames = os.listdir(MEDITATION_DIRECTORY)
+        except OSError:
+            filenames = []
+
+        for filename in filenames:
+            path = os.path.join(MEDITATION_DIRECTORY, filename)
+            duration = self._get_audio_duration(path)
+            if duration:
+                meditations.append((path, duration))
+
+        return meditations
+
+    def play_meditation(self, filename: str, length: int, loop: bool = False) -> None:
+        print('Playing meditation:', filename, '-', humanize_duration(length))
+        args = ['cvlc', filename]
+        if loop:
+            args.append('--loop')
+
+        vlc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                               stdin=subprocess.DEVNULL)
+        try:
+            while vlc.poll() is None:
+                time.sleep(0.5)
+        except KeyboardInterrupt:
+            vlc.terminate()
+            vlc.wait()
+
+    def print_meditation_strategy(self, meditations: List[Tuple[str, int]], interval: int) -> None:
+        print('Meditation Strategy:')
+        offset = 0
+        for path, duration in meditations:
+            length = humanize_duration(offset)
+            print(f'  {length} {os.path.basename(path)} ({humanize_duration(length)})')
+            offset += duration + interval
+        print()
+
+    def meditate(self, duration: int = 60) -> None:
+        meditations = self.load_meditations()
+        selected = []
+        if not meditations:
+            print('error: no meditations available', file=sys.stderr)
+            return
+
+        remaining = duration
+        random.shuffle(meditations)
+        for path, length in meditations:
+            if length < remaining:
+                selected.append((path, length))
+                remaining -= length
+
+        interval = remaining / len(selected)
+        self.print_meditation_strategy(selected, interval)
+
+        for path, length in selected:
+            self.play_meditation(path, length)
+            time.sleep(interval)
+
+        self.play_meditation(os.path.join(AUDIO_DIRECTORY, 'alarm.mp3'), loop=True)
+
 
 if __name__ == '__main__':
     import argparse
@@ -364,6 +462,7 @@ if __name__ == '__main__':
     commands.add_parser('start')
     commands.add_parser('banner')
     commands.add_parser('screensaver')
+    commands.add_parser('meditate')
 
     args = parser.parse_args()
 
@@ -376,3 +475,5 @@ if __name__ == '__main__':
         cyberdeck.print_banner()
     elif args.command == 'screensaver':
         cyberdeck.screensaver()
+    elif args.command == 'meditate':
+        cyberdeck.meditate()
