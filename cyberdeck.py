@@ -7,7 +7,7 @@
 
 import subprocess
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import Iterator, List, Optional, Tuple
 import re
 import os
 import sys
@@ -16,6 +16,7 @@ from enum import Enum
 import psutil
 import random
 import time
+import string
 
 
 __version__ = '0.1.0'
@@ -72,6 +73,14 @@ BANNER = '''
 
 AUDIO_DIRECTORY = os.path.join(os.path.dirname(__file__), 'audio')
 MEDITATION_DIRECTORY = os.path.join(AUDIO_DIRECTORY, 'meditations')
+SCREENSAVER_CHARS = (
+    ' ' +
+    string.ascii_lowercase +
+    string.digits +
+    '!@#$%^&*()_+-][}{;:<>,./?`~абвгдежзиклмнопрстуфхцчшщъыьэюя' +
+    'ｦｧｨｩｪｫｬｭｮｯｰｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ'
+)
+SCREENSAVER_CHAR_WEIGHTS = [50] + ([1] * (len(SCREENSAVER_CHARS) - 1))
 
 
 @dataclass
@@ -106,6 +115,73 @@ class CyberdeckMode(Enum):
     docked = 'Docked'
     undocked = 'Undocked'
     terminal = 'Terminal'
+
+
+@dataclass
+class Meditation:
+    path: str
+    duration: int
+    offset: int = 0
+
+    @property
+    def name(self) -> str:
+        return os.path.splitext(os.path.basename(self.path))[0]
+
+    @classmethod
+    def load(cls, path: str) -> Optional['Meditation']:
+        try:
+            output = subprocess.check_output(['ffprobe', '-i', path, '-show_format'],
+                                             stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
+        except subprocess.CalledProcessError:
+            return None
+
+        lines = output.splitlines()
+        for line in lines:
+            if line.startswith(b'duration='):
+                duration = int(float(line.split(b'=')[1].strip()))
+                return cls(path, duration)
+
+        return None
+
+
+@dataclass
+class MeditationSession:
+    meditations: List[Meditation]
+    duration: int
+    padding: int
+
+    @classmethod
+    def create(cls, available: List[Meditation], duration: int) -> 'MeditationSession':
+        remaining = duration
+        selected = []
+        available = list(available)
+        random.shuffle(available)
+
+        for meditation in available:
+            if meditation.duration < remaining:
+                selected.append(meditation)
+                remaining -= meditation.duration
+
+        padding = remaining / len(selected)
+        offset = 0
+        for meditation in selected:
+            meditation.offset = offset
+            offset += meditation.duration + padding
+
+        return cls(selected, duration, padding)
+
+    def __len__(self) -> int:
+        return len(self.meditations)
+
+    def __iter__(self) -> Iterator[Meditation]:
+        return iter(self.meditations)
+
+
+def chunk(data: List[str], size: int) -> Iterator[str]:
+    pos = 0
+    while pos < len(data):
+        yield ''.join(data[pos:pos + size])
+        pos += size
 
 
 class Cyberdeck:
@@ -380,43 +456,39 @@ class Cyberdeck:
         with open(BACKLIGHT_POWER_FILENAME, 'wb') as fp:
             fp.write(b'0\n' if enabled else b'1\n')
 
-    def _get_audio_duration(self, filename: str) -> int:
-        try:
-            output = subprocess.check_output(['ffprobe', '-i', filename, '-show_format'],
-                                             stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
-        except subprocess.CalledProcessError:
-            output = b''
-
-        lines = output.splitlines()
-        for line in lines:
-            if line.startswith(b'duration='):
-                return int(float(line.split(b'=')[1].strip()))
-
-        return 0
-
-    def load_meditations(self) -> List[Tuple[str, int]]:
+    def load_meditations(self) -> List[Meditation]:
         meditations = []
+        print('Loading Meditations')
         try:
             filenames = os.listdir(MEDITATION_DIRECTORY)
         except OSError:
             filenames = []
 
         for filename in filenames:
+            print(' ', filename, '... ', flush=True, end='')
             path = os.path.join(MEDITATION_DIRECTORY, filename)
-            duration = self._get_audio_duration(path)
-            if duration:
-                meditations.append((path, duration))
+            meditation = Meditation.load(path)
+            if meditation:
+                print(humanize_duration(meditation.duration))
+                meditations.append(meditation)
+            else:
+                print('error')
 
         return meditations
 
-    def play_meditation(self, filename: str, length: int, loop: bool = False) -> None:
-        print('Playing meditation:', filename, '-', humanize_duration(length))
+    def play_audio(self, filename: str, loop: bool = False) -> subprocess.Popen:
         args = ['cvlc', filename]
         if loop:
             args.append('--loop')
 
-        vlc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                               stdin=subprocess.DEVNULL)
+        return subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                stdin=subprocess.DEVNULL)
+
+    def play_meditation(self, session: MeditationSession, meditation: Meditation) -> None:
+        self.meditation_session_heartbeat(session, meditation)
+
+        vlc = self.play_audio(meditation.path)
+
         try:
             while vlc.poll() is None:
                 time.sleep(0.5)
@@ -425,37 +497,69 @@ class Cyberdeck:
             vlc.wait()
             raise
 
-    def print_meditation_strategy(self, meditations: List[Tuple[str, int]], interval: int) -> None:
-        print('Meditation Strategy:')
-        offset = 0
-        for path, duration in meditations:
-            start = humanize_duration(offset)
-            print(f'  {start} {os.path.basename(path)} ({humanize_duration(duration)})')
-            offset += duration + interval
-        print()
+    def meditation_session_heartbeat(self, session: MeditationSession,
+                                     active: Meditation = None) -> List[str]:
+        term_size = os.get_terminal_size()
+        status = [
+            '=' * term_size.columns,
+            '',
+            'Meditation Session',
+            ''
+        ]
+        for meditation in session:
+            if meditation is active:
+                prefix = '\x1b[1;33m>> '
+            else:
+                prefix = '   '
+
+            status.append(
+                f'{prefix}{humanize_duration(meditation.offset)} {meditation.name} '
+                f'({humanize_duration(meditation.duration)})\x1b[0m'
+            )
+
+        status += [
+            '',
+            '=' * term_size.columns
+        ]
+
+        top = random.randint(0, term_size.lines - 1 - len(status))
+        noise = random.choices(SCREENSAVER_CHARS, weights=SCREENSAVER_CHAR_WEIGHTS,
+                               k=(term_size.lines - len(status)) * term_size.columns)
+        noise_lines = list(chunk(noise, size=term_size.columns))
+
+        print('\x1b[2J', end='')
+
+        if top:
+            print('\n'.join(noise_lines[:top]))
+
+        print('\n'.join(status), end='', flush=True)
+
+        if top < len(noise_lines):
+            print('\n' + '\n'.join(noise_lines[top:]), end='', flush=True)
+
+    def play_alarm(self) -> None:
+        vlc = self.play_audio(os.path.join(AUDIO_DIRECTORY, 'alarm.mp3'), loop=True)
+        try:
+            while vlc.poll() is None:
+                time.sleep(0.5)
+        except KeyboardInterrupt:
+            vlc.terminate()
+            vlc.wait()
+            raise
 
     def meditate(self, duration: int = 60) -> None:
         meditations = self.load_meditations()
-        selected = []
         if not meditations:
             print('error: no meditations available', file=sys.stderr)
             return
 
-        remaining = duration * 60
-        random.shuffle(meditations)
-        for path, length in meditations:
-            if length < remaining:
-                selected.append((path, length))
-                remaining -= length
+        session = MeditationSession.create(meditations, duration)
 
-        interval = remaining / len(selected)
-        self.print_meditation_strategy(selected, interval)
+        for meditation in session:
+            self.play_meditation(session, meditation)
+            time.sleep(session.padding)
 
-        for path, length in selected:
-            self.play_meditation(path, length)
-            time.sleep(interval)
-
-        self.play_meditation(os.path.join(AUDIO_DIRECTORY, 'alarm.mp3'), loop=True)
+        self.play_alarm()
 
 
 if __name__ == '__main__':
@@ -486,4 +590,4 @@ if __name__ == '__main__':
     elif args.command == 'terminal':
         cyberdeck.terminal()
     elif args.command == 'meditate':
-        cyberdeck.meditate(duration=args.duration)
+        cyberdeck.meditate(duration=args.duration * 60)
