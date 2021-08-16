@@ -70,6 +70,16 @@ BANNER = '''
 \x1b[0m
 '''.format(version=__version__)
 
+WAKE_UP_BANNER = '''
+ _    _         _              _   _
+| |  | |       | |            | | | |
+| |  | |  __ _ | | __  ___    | | | | _ __
+| |/\\| | / _` || |/ / / _ \\   | | | || '_ \\
+\\  /\\  /| (_| ||   < |  __/   | |_| || |_) |
+ \\/  \\/  \\__,_||_|\\_\\ \\___|    \\___/ | .__/
+                                     | |
+                                     |_|
+'''
 
 AUDIO_DIRECTORY = os.path.join(os.path.dirname(__file__), 'audio')
 MEDITATION_DIRECTORY = os.path.join(AUDIO_DIRECTORY, 'meditations')
@@ -458,6 +468,9 @@ class Cyberdeck:
             fp.write(b'0\n' if enabled else b'1\n')
 
     def load_meditations(self) -> List[Meditation]:
+        '''
+        Load available meditations.
+        '''
         meditations = []
         print('Loading Meditations')
         try:
@@ -478,6 +491,9 @@ class Cyberdeck:
         return meditations
 
     def play_audio(self, filename: str, loop: bool = False) -> subprocess.Popen:
+        '''
+        Launch VLC to play the specified audio file.
+        '''
         args = ['cvlc', filename]
         if loop:
             args.append('--loop')
@@ -486,6 +502,9 @@ class Cyberdeck:
                                 stdin=subprocess.DEVNULL)
 
     def play_meditation(self, session: MeditationSession, meditation: Meditation) -> None:
+        '''
+        Play a meditation.
+        '''
         self.meditation_session_heartbeat(session, meditation)
 
         vlc = self.play_audio(meditation.path)
@@ -504,8 +523,14 @@ class Cyberdeck:
             raise
 
     def meditation_session_heartbeat(self, session: MeditationSession,
-                                     active: Meditation = None) -> List[str]:
+                                     active: Meditation = None,
+                                     inbetween: bool = False) -> List[str]:
+        '''
+        Print a meditation heartbeat to the screen showing the status. This also acts as a
+        screensaver where random text is printed around the meditation status.
+        '''
         term_size = os.get_terminal_size()
+        # Build the status block
         status = [
             '=' * term_size.columns,
             '',
@@ -514,7 +539,7 @@ class Cyberdeck:
         ]
         for meditation in session:
             if meditation is active:
-                prefix = '\x1b[1;33m>> '
+                prefix = '\x1b[1;33m>> ' if not inbetween else '\x1b[1;32m✓✓ '
             else:
                 prefix = '   '
 
@@ -528,26 +553,40 @@ class Cyberdeck:
             '=' * term_size.columns
         ]
 
+        # Place the status block on a random line
         top = random.randint(0, term_size.lines - 1 - len(status))
+        # Build a buffer of random characters that will surround the status block
         noise = random.choices(SCREENSAVER_CHARS, weights=SCREENSAVER_CHAR_WEIGHTS,
                                k=(term_size.lines - len(status)) * term_size.columns)
+
+        # Turn the noise into lines in a shade of green
         noise_lines = [
             f'\x1b[38;5;{random.choice(GREEN_ANSI_COLORS)}m{line}\x1b[0m'
             for line in chunk(noise, size=term_size.columns)
         ]
 
+        # Clear the screen
         print('\x1b[2J', end='')
 
         if top:
+            # Print the noise preceeding the status
             print('\n'.join(noise_lines[:top]))
 
+        # print the status block
         print('\n'.join(status), end='', flush=True)
 
         if top < len(noise_lines):
+            # print the bottom noise
             print('\n' + '\n'.join(noise_lines[top:]), end='', flush=True)
 
     def play_alarm(self) -> None:
+        '''
+        Play the meditation alarm sound.
+        '''
         vlc = self.play_audio(os.path.join(AUDIO_DIRECTORY, 'alarm.mp3'), loop=True)
+        print('\x1b[2J')
+        print('\x1b[1;32m', WAKE_UP_BANNER, '\x1b[0m', sep='')
+        print()
         try:
             while vlc.poll() is None:
                 time.sleep(0.5)
@@ -556,7 +595,12 @@ class Cyberdeck:
             vlc.wait()
             raise
 
-    def meditate(self, duration: int = 60) -> None:
+    def meditate(self, duration: int = 3600) -> None:
+        '''
+        Run a meditation session.
+
+        :param duration: session duration in seconds (default is 1 hour)
+        '''
         meditations = self.load_meditations()
         if not meditations:
             print('error: no meditations available', file=sys.stderr)
@@ -566,6 +610,7 @@ class Cyberdeck:
 
         for meditation in session:
             self.play_meditation(session, meditation)
+            self.meditation_session_heartbeat(session, meditation, inbetween=True)
             time.sleep(session.padding)
 
         self.play_alarm()
