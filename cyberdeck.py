@@ -81,6 +81,7 @@ SCREENSAVER_CHARS = (
     'ｦｧｨｩｪｫｬｭｮｯｰｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ'
 )
 SCREENSAVER_CHAR_WEIGHTS = [50] + ([1] * (len(SCREENSAVER_CHARS) - 1))
+GREEN_ANSI_COLORS = [22, 28, 34, 35, 40, 41, 46, 47, 76, 77, 82, 83]
 
 
 @dataclass
@@ -488,9 +489,14 @@ class Cyberdeck:
         self.meditation_session_heartbeat(session, meditation)
 
         vlc = self.play_audio(meditation.path)
+        cycle = 0
 
         try:
             while vlc.poll() is None:
+                cycle += 1
+                if cycle % 10 == 0:
+                    self.meditation_session_heartbeat(session, meditation)
+
                 time.sleep(0.5)
         except KeyboardInterrupt:
             vlc.terminate()
@@ -525,7 +531,10 @@ class Cyberdeck:
         top = random.randint(0, term_size.lines - 1 - len(status))
         noise = random.choices(SCREENSAVER_CHARS, weights=SCREENSAVER_CHAR_WEIGHTS,
                                k=(term_size.lines - len(status)) * term_size.columns)
-        noise_lines = list(chunk(noise, size=term_size.columns))
+        noise_lines = [
+            f'\x1b[38;5;{random.choice(GREEN_ANSI_COLORS)}m{line}\x1b[0m'
+            for line in chunk(noise, size=term_size.columns)
+        ]
 
         print('\x1b[2J', end='')
 
