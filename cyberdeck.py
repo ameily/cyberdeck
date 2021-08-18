@@ -130,6 +130,9 @@ class CyberdeckMode(Enum):
 
 @dataclass
 class Meditation:
+    '''
+    An audio guided meditation.
+    '''
     path: str
     duration: int
     offset: int = 0
@@ -140,6 +143,10 @@ class Meditation:
 
     @classmethod
     def load(cls, path: str) -> Optional['Meditation']:
+        '''
+        Load a meditation from disk.
+        '''
+        # Get the audio duration, in seconds, using ffprobe
         try:
             output = subprocess.check_output(['ffprobe', '-i', path, '-show_format'],
                                              stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
@@ -157,6 +164,9 @@ class Meditation:
 
 @dataclass
 class MeditationSession:
+    '''
+    A meditation session containing multiple randomly chosen guided meditations.
+    '''
     meditations: List[Meditation]
     duration: int
     padding: int
@@ -189,6 +199,12 @@ class MeditationSession:
 
 
 def chunk(data: List[str], size: int) -> Iterator[str]:
+    '''
+    Yield same-size chunks from a string.
+
+    :param data: string to chunk
+    :param size: the chunk size
+    '''
     pos = 0
     while pos < len(data):
         yield ''.join(data[pos:pos + size])
@@ -383,6 +399,9 @@ class Cyberdeck:
         return usage, color
 
     def get_ip_address(self) -> str:
+        '''
+        Get the system IP address.
+        '''
         try:
             output = subprocess.check_output(['hostname', '--all-ip-addresses'],
                                              stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
@@ -463,7 +482,6 @@ class Cyberdeck:
 
         :param enabled: turn on the backlight
         '''
-        print('toggle_touchscreen_backlight:', enabled)
         with open(BACKLIGHT_POWER_FILENAME, 'wb') as fp:
             fp.write(b'0\n' if enabled else b'1\n')
 
@@ -506,6 +524,7 @@ class Cyberdeck:
         Play a meditation.
         '''
         self.meditation_session_heartbeat(session, meditation)
+        self.toggle_touchscreen_backlight(True)
 
         vlc = self.play_audio(meditation.path)
         cycle = 0
@@ -513,14 +532,21 @@ class Cyberdeck:
         try:
             while vlc.poll() is None:
                 cycle += 1
-                if cycle % 10 == 0:
+                if cycle % 90 == 0:
+                    # Turn on the backlight every 45 seconds
                     self.meditation_session_heartbeat(session, meditation)
+                    self.toggle_touchscreen_backlight(True)
+                elif cycle % 30 == 0:
+                    # Turn off the backlight every 15 seconds
+                    self.toggle_touchscreen_backlight(False)
 
                 time.sleep(0.5)
         except KeyboardInterrupt:
             vlc.terminate()
             vlc.wait()
             raise
+        finally:
+            self.toggle_touchscreen_backlight(True)
 
     def meditation_session_heartbeat(self, session: MeditationSession,
                                      active: Meditation = None,
@@ -539,7 +565,7 @@ class Cyberdeck:
         ]
         for meditation in session:
             if meditation is active:
-                prefix = '\x1b[1;33m>> ' if not inbetween else '\x1b[1;32m✓✓ '
+                prefix = '\x1b[1;33m>> ' if not inbetween else '\x1b[1;32m++ '
             else:
                 prefix = '   '
 
