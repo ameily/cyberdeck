@@ -515,6 +515,8 @@ class Cyberdeck:
         args = ['cvlc', filename]
         if loop:
             args.append('--loop')
+        else:
+            args.append('--play-and-exit')
 
         return subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                 stdin=subprocess.DEVNULL)
